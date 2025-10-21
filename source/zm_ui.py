@@ -42,6 +42,44 @@ class ZM_OT_ConnectCamera(bpy.types.Operator):
             self.report({'WARNING'}, "Failed to connect the selected camera.")
         return {'FINISHED'}
 
+
+# -----------------------------------------------------------------------------
+# NEW: Swap operator between HD and Proxy
+# -----------------------------------------------------------------------------
+class ZM_OT_SwapHDProxy(bpy.types.Operator):
+    """Swap the selected strip between HD and Proxy (if proxy exists)"""
+    bl_idname = "zm.swap_hd_proxy"
+    bl_label = "Swap HD/Proxy"
+
+    strip_name: bpy.props.StringProperty(default="")
+
+    def execute(self, context):
+        scene = context.scene
+        # try strip name from selection if not provided
+        name = self.strip_name or getattr(scene, 'zm_preview_strip_name', '')
+        if not name:
+            # try active sequence
+            seq = getattr(scene, 'sequence_editor', None)
+            if seq and seq.sequences_all:
+                sel = next((s for s in seq.sequences_all if getattr(s, 'select', False)), None)
+                if sel:
+                    name = sel.name
+        if not name:
+            self.report({'WARNING'}, 'No strip selected to swap')
+            return {'CANCELLED'}
+
+        # determine scale label from scene property
+        scale = getattr(scene, 'zm_proxy_scale', '50')
+        try:
+            from . import zm_convert
+            zm_convert.swap_strip_resolution(context, strip_name=name, use_proxy=True, scale_label=scale)
+            self.report({'INFO'}, 'Swap attempted')
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Swap failed: {e}")
+            return {'CANCELLED'}
+
+
 # -----------------------------------------------------------------------------
 # Panel principal en el N-panel del VSE
 # -----------------------------------------------------------------------------
@@ -118,8 +156,12 @@ class ZM_PT_MoviePanel(bpy.types.Panel):
         row.prop(scene, "zm_movie_length")
         row.prop(scene, "zm_movie_overwrite")
 
-        # Añadimos el botón que llamará al operador de zm_movie.py
+        row = box.row()
+        row.label(text="Proxy Scale:")
+        row.prop(scene, 'zm_proxy_scale', text='')
+
         box.operator("zm.create_movie_sequence", text="Create / Extend Sequence", icon="ADD")
+        box.operator("zm.swap_hd_proxy", text="Swap HD/Proxy", icon='FILE_REFRESH')
 
 # -----------------------------------------------------------------------------
 # Registro
@@ -127,6 +169,7 @@ class ZM_PT_MoviePanel(bpy.types.Panel):
 classes = (
     ZM_OT_DetectCameras,
     ZM_OT_ConnectCamera,
+    ZM_OT_SwapHDProxy,  # <-- ADDED
     ZM_PT_CameraPanel,
     ZM_PT_MoviePanel, 
 )

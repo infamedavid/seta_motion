@@ -25,8 +25,9 @@ from . import (
     zm_camera,
     zm_stream,
     zm_ui,
-    zm_movie, 
+    zm_movie,
     zm_preview,
+    zm_convert,   # <-- ADDED
 )
 
 modules = {
@@ -35,7 +36,8 @@ modules = {
     "zm_stream": zm_stream,
     "zm_ui": zm_ui,
     "zm_movie": zm_movie,
-    "zm_preview": zm_preview, 
+    "zm_preview": zm_preview,
+    "zm_convert": zm_convert,  # <-- ADDED
 }
 
 # --- Hot reload for development: reload modules to pick up edits ---
@@ -51,7 +53,7 @@ def register():
         zm_stream.register()
     if hasattr(zm_movie, "register"): # Registramos el nuevo módulo de película
         zm_movie.register()
-    if hasattr(zm_preview, "register"):      # <-- añade
+    if hasattr(zm_preview, "register"):
         zm_preview.register()
     
     # UI must be registered last
@@ -91,24 +93,39 @@ def register():
         default=False,
     )
 
+    # NEW: proxy scale preference used by conversion/swap (25/50/75)
+    bpy.types.Scene.zm_proxy_scale = bpy.props.EnumProperty(
+        name="Proxy Scale",
+        description="Scale to generate proxies (percentage)",
+        items=[
+            ('25', "25%", "Generate 25% proxy"),
+            ('50', "50%", "Generate 50% proxy"),
+            ('75', "75%", "Generate 75% proxy"),
+        ],
+        default='50'
+    )
+
     print("[Zeta Motion] Add-on initialized (Blender 4.5+ / Linux).")
 
 def unregister():
     # Remove scene properties
     props_to_remove = (
         "zm_camera_list", "zm_preview_path", "zm_capture_path",
-        "zm_movie_length", "zm_movie_overwrite"
+        "zm_movie_length", "zm_movie_overwrite", "zm_proxy_scale"
     )
     for prop in props_to_remove:
         if hasattr(bpy.types.Scene, prop):
-            delattr(bpy.types.Scene, prop)
+            try:
+                delattr(bpy.types.Scene, prop)
+            except Exception:
+                pass
 
     # Unregister in reverse order
     if hasattr(zm_ui, "unregister"):
         zm_ui.unregister()
     if hasattr(zm_movie, "unregister"): # Des-registramos el nuevo módulo
         zm_movie.unregister()
-    if hasattr(zm_preview, "unregister"):    # <-- añade
+    if hasattr(zm_preview, "unregister"):
         zm_preview.unregister()
 
     if hasattr(zm_stream, "unregister"):

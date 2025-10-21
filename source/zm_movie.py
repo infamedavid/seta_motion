@@ -17,6 +17,7 @@ except ImportError:
 # Módulos internos
 from . import state
 from . import zm_stream
+from . import zm_convert   # <-- NEW
 
 # --- Estado global para la comunicación entre el operador y el temporizador ---
 timer_state = {
@@ -25,6 +26,8 @@ timer_state = {
     "context": None,
     "base_name": None,
     "directory": None,
+    # new key to store proxy path when ready
+    "proxy_path": None,
 }
 
 # -----------------------------------------------------------------------------
@@ -101,14 +104,29 @@ def _create_vse_strip(context, directory, base_name, length):
     frame_start = scene.frame_current
 
     # Buscar archivos válidos (JPG numerados)
-    image_files = [
-        f for f in sorted(os.listdir(directory))
-        if f.startswith(base_name + "_") and f.endswith(".jpg")
-    ]
+    # PRIORIDAD: proxies (base_25_idx, base_50_idx, base_75_idx)
+    files = sorted(os.listdir(directory))
+    proxy_patterns = [f"{base_name}_25_", f"{base_name}_50_", f"{base_name}_75_"]
+
+    image_files = []
+    # primero, intenta encontrar proxies en orden de presets (25/50/75)
+    for patt in proxy_patterns:
+        pf = [f for f in files if f.startswith(patt) and f.lower().endswith(".jpg")]
+        if pf:
+            image_files = sorted(pf)
+            print(f"[Zeta Motion] Using proxy pattern '{patt}' with {len(image_files)} frames.")
+            break
+
+    # si no hay proxies, caemos al patrón original base_name_*
+    if not image_files:
+        image_files = [f for f in files if f.startswith(base_name + "_") and f.lower().endswith(".jpg")]
+        if image_files:
+            image_files = sorted(image_files)
 
     if not image_files:
-        print(f"❌ No se encontraron imágenes con prefijo '{base_name}_' en {directory}")
+        print(f"❌ No se encontraron imágenes con prefijo '{base_name}_' ni proxies en {directory}")
         return
+
 
     # Crear strip base con el primer frame
     first_frame_path = os.path.join(directory, image_files[0])
@@ -144,8 +162,8 @@ def _create_vse_strip(context, directory, base_name, length):
     #strip.use_proxy = False
     strip.animation_offset_start = 0
     strip.animation_offset_end = 0
-    strip.frame_still_start = 0
-    strip.frame_still_end = 0
+    #strip.frame_still_start = 0
+    #strip.frame_still_end = 0
 
     # Mantener el cursor en el primer frame real
     scene.frame_current = frame_start
@@ -169,13 +187,26 @@ def _timer_callback():
         
         context = timer_state["context"]
         scene = context.scene
-        
-        resolution = _get_image_resolution(target_path)
+
+        # Siempre usar el proxy como referencia para medir el placeholder
+        proxy_path = timer_state.get("proxy_path")
+
+        if not proxy_path or not os.path.exists(proxy_path):
+            # Proxy aún no listo, esperar otro ciclo
+            print("⌛ Esperando proxy...")
+            return 0.5
+
+        resolution = _get_image_resolution(proxy_path)
+
+
         
         if resolution:
+            # Derivar el nombre base directamente del proxy para nomenclatura correcta
+            proxy_base = os.path.splitext(os.path.basename(proxy_path))[0]
+            
             _generate_placeholders(
                 directory=timer_state["directory"],
-                base_name=timer_state["base_name"],
+                base_name=proxy_base,
                 length=scene.zm_movie_length,
                 resolution=resolution,
                 overwrite=scene.zm_movie_overwrite
@@ -195,12 +226,14 @@ def _timer_callback():
         print("="*50)
 
         timer_state["is_running"] = False
+        # clear proxy path for next run
+        timer_state["proxy_path"] = None
         return None
     
     return 0.5
 
 # -----------------------------------------------------------------------------
-# Lógica de Captura (sin cambios)
+# Lógica de Captura (parcialmente modificada para lanzar conversión asíncrona)
 # -----------------------------------------------------------------------------
 def _find_camera_image_folder():
     """Encuentra dinámicamente la carpeta completa de imágenes en la cámara."""
@@ -247,6 +280,26 @@ def _capture_task(save_path):
         )
         if not os.path.exists(save_path):
             print(f"❌ Error: El comando de descarga finalizó, pero el archivo no se encontró.")
+            return
+
+        # --- START: generate proxy asynchronously ---
+        try:
+            sc = timer_state.get("context").scene if timer_state.get("context") else None
+            scale_pref = getattr(sc, "zm_proxy_scale", "50") if sc else "50"
+
+            def _on_proxy_ready(proxy_path):
+                if proxy_path and os.path.exists(proxy_path):
+                    timer_state["proxy_path"] = proxy_path
+                    print(f"[Zeta Motion] Proxy ready: {proxy_path}")
+                else:
+                    timer_state["proxy_path"] = None
+                    print("[Zeta Motion] Proxy creation failed or missing")
+
+            zm_convert.convert_image_async(save_path, scale_pref, callback=_on_proxy_ready)
+        except Exception as e:
+            print(f"[Zeta Motion] Warning: proxy creation failed to start: {e}")
+        # --- END: generate proxy asynchronously ---
+
     except Exception as e:
         print(f"❌ Error durante la captura en segundo plano: {e}")
 
@@ -274,7 +327,7 @@ def _resume_paused_stream(context):
         print("[Zeta Motion] Stream reanudado.")
 
 # -----------------------------------------------------------------------------
-# Operador Principal (sin cambios)
+# Operador Principal (sin cambios en interface salvo usar timer_state proxy)
 # -----------------------------------------------------------------------------
 class ZM_OT_CreateMovieSequence(bpy.types.Operator):
     bl_idname = "zm.create_movie_sequence"
@@ -318,6 +371,7 @@ class ZM_OT_CreateMovieSequence(bpy.types.Operator):
             "context": context,
             "base_name": base_name,
             "directory": directory,
+            "proxy_path": None,
         })
         bpy.app.timers.register(_timer_callback, first_interval=0.5)
 
