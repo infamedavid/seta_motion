@@ -27,7 +27,8 @@ from . import (
     zm_ui,
     zm_movie,
     zm_preview,
-    zm_convert,   # <-- ADDED
+    zm_convert,
+    zm_movie_source,
 )
 
 modules = {
@@ -37,7 +38,8 @@ modules = {
     "zm_ui": zm_ui,
     "zm_movie": zm_movie,
     "zm_preview": zm_preview,
-    "zm_convert": zm_convert,  # <-- ADDED
+    "zm_convert": zm_convert,
+    "zm_movie_source": zm_movie_source
 }
 
 # --- Hot reload for development: reload modules to pick up edits ---
@@ -55,6 +57,7 @@ def register():
         zm_movie.register()
     if hasattr(zm_preview, "register"):
         zm_preview.register()
+    
     
     # UI must be registered last
     if hasattr(zm_ui, "register"):
@@ -105,14 +108,29 @@ def register():
         default='50'
     )
 
+    bpy.types.Scene.zm_live_blend_enabled = bpy.props.BoolProperty(
+        name="Enable Live Blend",
+        description="Enable Onion Skinning by blending the live feed over the current frame in the VSE",
+        default=False,
+    )
+    bpy.types.Scene.zm_blend_factor = bpy.props.FloatProperty(
+        name="Blend Factor",
+        description="Opacity of the live camera feed over the still image",
+        default=0.5,
+        min=0.0,
+        max=1.0,
+    )
+
     print("[Zeta Motion] Add-on initialized (Blender 4.5+ / Linux).")
 
 def unregister():
     # Remove scene properties
     props_to_remove = (
         "zm_camera_list", "zm_preview_path", "zm_capture_path",
-        "zm_movie_length", "zm_movie_overwrite", "zm_proxy_scale"
+        "zm_movie_length", "zm_movie_overwrite", "zm_proxy_scale",
+        "zm_live_blend_enabled", "zm_blend_factor"
     )
+    
     for prop in props_to_remove:
         if hasattr(bpy.types.Scene, prop):
             try:
