@@ -2,11 +2,8 @@
 # Blender 4.5+ | Linux-only
 
 import subprocess
-from . import state
+from . import state, zm_stream, zm_settings
 
-# -----------------------------------------------------------------------------
-# Camera detection
-# -----------------------------------------------------------------------------
 def detect_cameras():
     """Detect available cameras using gphoto2 and store their info."""
     try:
@@ -26,7 +23,8 @@ def detect_cameras():
                     model, port = parts
                     cams.append({"model": model.strip(), "port": port.strip()})
 
-        state.control_state["camera"]["available"] = cams
+        with state.state_lock:
+            state.control_state["camera"]["available"] = cams
         print(f"[Zeta Motion] Cameras detected: {cams}")
         return cams
 
@@ -40,19 +38,47 @@ def detect_cameras():
         print(f"[Zeta Motion] Error detecting cameras: {e}")
         return []
 
-# -----------------------------------------------------------------------------
-# Camera connection
-# -----------------------------------------------------------------------------
 def connect_camera(camera_dict):
-    """Connect the selected camera and store its state."""
+    """
+    Conecta la cámara seleccionada, detiene streams activos, y lanza la consulta
+    asíncrona y serializada de todos sus ajustes.
+    """
     if not camera_dict:
-        print("[Zeta Motion] No camera selected.")
+        print("[Zeta Motion] No camera selected to connect.")
         return
+        
+    print(f"[Zeta Motion] Conectando a {camera_dict['model']}...")
+    zm_stream.stop_all_streams()
 
-    state.control_state["camera"]["active_name"] = camera_dict["model"]
-    state.control_state["camera"]["active_port"] = camera_dict["port"]
-    state.control_state["system"]["connected"] = True
-    print(f"[Zeta Motion] Camera connected: {camera_dict['model']} ({camera_dict['port']})")
+    with state.state_lock:
+        state.control_state["camera"]["active_name"] = camera_dict["model"]
+        state.control_state["camera"]["active_port"] = camera_dict["port"]
+        state.control_state["system"]["connected"] = True
+    
+    print(f"[Zeta Motion] Cámara conectada. Iniciando consulta de ajustes...")
+
+    params_to_query = list(state.control_state["camera"]["settings"]["choices"].keys())
+    
+    def _query_chain_callback(param_name, current_value, choices_list):
+        """Callback que se ejecuta al recibir un resultado y lanza la siguiente consulta."""
+        print(f"↳ Recibido resultado para '{param_name}': Current='{current_value}', Choices={len(choices_list)}")
+        with state.state_lock:
+            state.control_state["camera"]["settings"]["choices"][param_name] = choices_list
+            state.control_state["camera"]["settings"]["current"][param_name] = current_value
+            state.control_state["camera"]["settings"]["desired"][param_name] = current_value
+        
+        if params_to_query:
+            next_param = params_to_query.pop(0)
+            print(f"→ Solicitando configuración para '{next_param}'...")
+            zm_settings.get_gphoto_config(next_param, _query_chain_callback)
+        else:
+            print("[Zeta Motion] Consulta de todos los ajustes finalizada.")
+
+    # Iniciar la cadena de consultas con el primer parámetro
+    if params_to_query:
+        first_param = params_to_query.pop(0)
+        print(f"→ Solicitando configuración para '{first_param}'...")
+        zm_settings.get_gphoto_config(first_param, _query_chain_callback)
 
 def get_active_camera():
     """Return the active camera dictionary or None."""
@@ -63,7 +89,6 @@ def get_active_camera():
             return c
     return None
 
-# --- Blender registration (minimal: module has register/unregister) ---
 def register():
     print("[Zeta Motion] zm_camera registered.")
 
