@@ -39,7 +39,8 @@ control_state = {
         }
     },
     "system": {
-        "connected": False,    # conecction state
+"connected": False, # connection state
+"photo_task_active": False, # True while a foto_capture task is running
     },
 
     # Stream state: only this key is required to know if a stream is active

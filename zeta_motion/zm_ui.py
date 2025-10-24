@@ -100,7 +100,7 @@ class ZM_PT_CameraPanel(bpy.types.Panel):
         layout = self.layout
         scene = context.scene
         is_connected = state.control_state["system"]["connected"]
-        
+
         # --- Sección de Conexión ---
         box = layout.box()
         box.label(text="Camera Connection", icon="CAMERA_DATA")
@@ -175,6 +175,45 @@ class ZM_PT_MoviePanel(bpy.types.Panel):
         row.operator("zm.swap_hd_proxy", text="Use HD").use_proxy = False
         row.operator("zm.swap_hd_proxy", text="Use Proxy").use_proxy = True
 
+class ZM_PT_ShootingPanel(bpy.types.Panel):
+    bl_label = "Shooting"
+    bl_idname = "ZM_PT_shooting_panel"
+    bl_space_type = "SEQUENCE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "Zeta Motion"
+    bl_parent_id = "ZM_PT_camera_panel"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        # Optional: disable if no sequence editor available
+        if not getattr(scene, "sequence_editor", None):
+            layout.label(text="Open the VSE to access shooting tools.", icon="ERROR")
+            return
+
+        box = layout.box()
+        box.label(text="Photo Sequence Tools", icon="IMAGE_DATA")
+
+        # If a photo task is running, disable buttons and show status
+        busy = False
+        try:
+            busy = bool(state.control_state["system"].get("photo_task_active", False))
+        except Exception:
+            busy = False
+
+        row = box.row(align=True)
+        row.enabled = not busy
+        row.operator("zm.replace_active_photo", text="Replace Photo", icon="FILE_REFRESH")
+        row.operator("zm.insert_active_photo", text="Insert Photo", icon="ADD")
+
+        row2 = box.row(align=True)
+        row2.enabled = not busy
+        row2.operator("zm.exclude_active_photo", text="Exclude Photo", icon="TRASH")
+
+        if busy:
+            box.label(text="Photo task in progress...", icon="TIME")
 # -----------------------------------------------------------------------------
 # Registro
 # -----------------------------------------------------------------------------
@@ -187,6 +226,7 @@ classes = (
     ZM_OT_SwapHDProxy,
     ZM_PT_CameraPanel,
     ZM_PT_MoviePanel,
+    ZM_PT_ShootingPanel,
 )
 
 def register():
