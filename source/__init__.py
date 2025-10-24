@@ -23,7 +23,8 @@ if sys.platform != "linux":
 # --- Import internal modules ---
 from . import (
     state, zm_camera, zm_stream, zm_ui, zm_movie,
-    zm_preview, zm_convert, zm_movie_source, zm_worker, zm_settings
+    zm_preview, zm_convert, zm_movie_source, zm_worker, zm_settings,
+    zm_foto # <--- AÑADIR ESTA LÍNEA
 )
 
 modules = {
@@ -31,6 +32,7 @@ modules = {
     "zm_ui": zm_ui, "zm_movie": zm_movie, "zm_preview": zm_preview,
     "zm_convert": zm_convert, "zm_movie_source": zm_movie_source,
     "zm_worker": zm_worker, "zm_settings": zm_settings,
+    "zm_foto": zm_foto, # <--- AÑADIR ESTA LÍNEA
 }
 
 # --- Hot reload for development ---
@@ -113,6 +115,7 @@ def register():
     if hasattr(zm_stream, "register"): zm_stream.register()
     if hasattr(zm_movie, "register"): zm_movie.register()
     if hasattr(zm_preview, "register"): zm_preview.register()
+    if hasattr(zm_foto, "register"): zm_foto.register() # <--- AÑADIR ESTA LÍNEA
     if hasattr(zm_ui, "register"): zm_ui.register()
 
     # --- Propiedades de Escena (sin cambios) ---
@@ -145,6 +148,7 @@ def unregister():
             try: delattr(bpy.types.Scene, prop)
             except Exception: pass
     if hasattr(zm_ui, "unregister"): zm_ui.unregister()
+    if hasattr(zm_foto, "unregister"): zm_foto.unregister() # <--- AÑADIR ESTA LÍNEA
     if hasattr(zm_movie, "unregister"): zm_movie.unregister()
     if hasattr(zm_preview, "unregister"): zm_preview.unregister()
     if hasattr(zm_stream, "unregister"): zm_stream.unregister()

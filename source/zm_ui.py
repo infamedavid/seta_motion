@@ -2,7 +2,7 @@
 # Blender 4.5+ | Linux-only
 
 import bpy
-from . import zm_camera, state, zm_settings, zm_stream, zm_movie_source
+from . import zm_camera, state, zm_settings, zm_stream, zm_movie_source, zm_foto # <--- AÑADIR ZM_FOTO
 
 # -----------------------------------------------------------------------------
 # Handler persistente
@@ -171,6 +171,24 @@ class ZM_PT_MoviePanel(bpy.types.Panel):
         box.prop(scene, "zm_proxy_scale")
         layout.separator()
         layout.operator("zm.create_movie_sequence", text="Create Sequence", icon="ADD")
+        layout.separator() # <-- (opcional, para separar visualmente)
+
+        # --- INICIO DEL CÓDIGO A AÑADIR ---
+        frame_box = layout.box()
+        frame_box.label(text="Frame Operations", icon="IMAGE_SEQUENCE")
+
+        # Comprobar si hay una foto activa para habilitar/deshabilitar los botones
+        is_photo_active = zm_foto.get_active_photo_details(context) is not None
+
+        row = frame_box.row(align=True)
+        row.enabled = is_photo_active
+        row.operator("zm.replace_active_photo", text="Replace", icon="FILE_REFRESH")
+        row.operator("zm.insert_active_photo", text="Insert", icon="ADD")
+        row.operator("zm.exclude_active_photo", text="Delete", icon="REMOVE")
+        if not is_photo_active:
+            frame_box.label(text="Select a strip and move playhead over a frame.", icon="INFO")
+        # --- FIN DEL CÓDIGO A AÑADIR ---
+
         row = layout.row(align=True)
         row.operator("zm.swap_hd_proxy", text="Use HD").use_proxy = False
         row.operator("zm.swap_hd_proxy", text="Use Proxy").use_proxy = True
