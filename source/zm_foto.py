@@ -27,7 +27,7 @@ def _store_movie_strip_properties(strip):
         data["blend_alpha"] = getattr(strip, "blend_alpha", 1.0)
         data["use_translation"] = getattr(strip, "use_translation", False)
         data["use_crop"] = getattr(strip, "use_crop", False)
-        
+
         transform = getattr(strip, "transform", None)
         if transform:
             data["transform"] = {
@@ -81,7 +81,7 @@ def get_active_photo_details(context):
                 strip.frame_start <= scene.frame_current < strip.frame_final_end):
             active_strip = strip
             break
-    
+
     if not active_strip:
         print("[Zeta Motion] No active image sequence strip found under playhead.")
         return None
@@ -93,13 +93,13 @@ def get_active_photo_details(context):
     if not (0 <= image_index < len(active_strip.elements)):
         print("[Zeta Motion] Playhead is out of the valid element range for the strip.")
         return None
-        
+
     # 3. Extraer información del fichero
     try:
         proxy_filename = active_strip.elements[image_index].filename
         directory = bpy.path.abspath(active_strip.directory)
         proxy_path = os.path.join(directory, proxy_filename)
-        
+
         # Regex para extraer base_name e índice numérico
         match = re.match(r'^(.*?)_(\d+)\.jpg$', proxy_filename)
         if not match:
@@ -150,44 +150,44 @@ def _exclude_photo(details):
     Excluye la foto actual y recompacta la secuencia.
     """
     if not details: return False
-    
+
     # 1. Excluir por renombrado
     if details["proxy_path"]:
         shutil.move(details["proxy_path"], details["proxy_path"] + ".excluded")
     if details["hd_path"]:
         shutil.move(details["hd_path"], details["hd_path"] + ".excluded")
-        
+
     print(f"[Zeta Motion] Excluded frame {details['index_str']}.")
 
     # 2. Renombrado masivo para llenar el hueco
     current_index = int(details["index_str"])
     proxy_scale = details["strip"].scene.zm_proxy_scale
-    
+
     all_files = get_sequence_files(details["directory"], details["base_name_core"], proxy_scale)
-    
+
     files_to_rename = []
     for f in all_files:
         match = re.search(r'_(\d+)\.jpg$', f)
         if match and int(match.group(1)) > current_index:
             files_to_rename.append(f)
-            
+
     # Iterar en orden ascendente para no sobrescribir
     for filename in sorted(files_to_rename):
         old_idx = int(re.search(r'_(\d+)\.jpg$', filename).group(1))
         new_idx = old_idx - 1
-        
+
         # Renombrar proxy
         new_proxy_name = f"{details['base_name_core']}_{proxy_scale}_{new_idx:05d}.jpg"
-        shutil.move(os.path.join(details["directory"], filename), 
+        shutil.move(os.path.join(details["directory"], filename),
                     os.path.join(details["directory"], new_proxy_name))
-        
+
         # Renombrar HD si existe
         old_hd_name = f"{details['base_name_core']}_HD_{old_idx:05d}.jpg"
         old_hd_path = os.path.join(details["directory"], old_hd_name)
         if os.path.exists(old_hd_path):
             new_hd_name = f"{details['base_name_core']}_HD_{new_idx:05d}.jpg"
             shutil.move(old_hd_path, os.path.join(details["directory"], new_hd_name))
-    
+
     print(f"[Zeta Motion] Re-indexed {len(files_to_rename)} frames.")
     return True
 
@@ -205,7 +205,7 @@ def refresh_movie_strip(context, strip_name, directory, base_name_core, proxy_sc
     if not seq:
         print("[Zeta Motion] No sequence editor found for refresh.")
         return
-        
+
     # 1. Encontrar y guardar estado del strip antiguo
     old_strip = next((s for s in seq.sequences if s.name == strip_name), None)
     if not old_strip:
@@ -215,10 +215,10 @@ def refresh_movie_strip(context, strip_name, directory, base_name_core, proxy_sc
     props_snapshot = _store_movie_strip_properties(old_strip)
     channel = old_strip.channel
     frame_start = old_strip.frame_start
-    
+
     # 2. Eliminar strip antiguo
     seq.sequences.remove(old_strip)
-    
+
     # 3. Encontrar la secuencia actualizada en disco
     sequence_files = get_sequence_files(directory, base_name_core, proxy_scale)
     if not sequence_files:
@@ -234,16 +234,16 @@ def refresh_movie_strip(context, strip_name, directory, base_name_core, proxy_sc
             channel=channel,
             frame_start=frame_start
         )
-        
+
         # Añadir resto de elementos
         for f in sequence_files[1:]:
             new_strip.elements.append(f)
-            
+
         new_strip.frame_final_duration = len(sequence_files)
-        
+
         # 5. Aplicar propiedades guardadas
         _apply_movie_strip_properties(new_strip, props_snapshot)
-        
+
         print(f"[Zeta Motion] Strip '{strip_name}' refreshed successfully with {len(sequence_files)} frames.")
     except Exception as e:
         print(f"[Zeta Motion] Fatal error rebuilding strip: {e}")
@@ -251,6 +251,41 @@ def refresh_movie_strip(context, strip_name, directory, base_name_core, proxy_sc
 # -----------------------------------------------------------------------------
 # Operadores de Blender
 # -----------------------------------------------------------------------------
+
+class ZM_OT_ReplaceActivePhoto(bpy.types.Operator):
+    """Captura una nueva foto y reemplaza el fotograma activo"""
+    bl_idname = "zm.replace_active_photo"
+    bl_label = "Replace Frame"
+
+    def execute(self, context):
+        details = get_active_photo_details(context)
+        if not details:
+            self.report({'WARNING'}, "No active frame to replace.")
+            return {'CANCELLED'}
+
+        # TODO: Implementar la llamada a una función de captura refactorizada
+        # que tome un callback. El callback gestionaría el reemplazo.
+        print("LOGIC PENDING: Call refactored capture with a replace_callback.")
+        self.report({'INFO'}, "Función de reemplazo pendiente de implementación.")
+        return {'FINISHED'}
+
+class ZM_OT_InsertActivePhoto(bpy.types.Operator):
+    """Captura una nueva foto y la inserta después del fotograma activo"""
+    bl_idname = "zm.insert_active_photo"
+    bl_label = "Insert Frame"
+
+    def execute(self, context):
+        details = get_active_photo_details(context)
+        if not details:
+            self.report({'WARNING'}, "No active frame to insert after.")
+            return {'CANCELLED'}
+
+        # TODO: Implementar la llamada a una función de captura refactorizada
+        # que tome un callback. El callback gestionaría la inserción.
+        print("LOGIC PENDING: Call refactored capture with an insert_callback.")
+        self.report({'INFO'}, "Función de inserción pendiente de implementación.")
+        return {'FINISHED'}
+
 
 class ZM_OT_ExcludeActivePhoto(bpy.types.Operator):
     """Excluye el fotograma activo y recompacta la secuencia"""
@@ -262,37 +297,31 @@ class ZM_OT_ExcludeActivePhoto(bpy.types.Operator):
         if not details:
             self.report({'WARNING'}, "No active frame to delete. Select a strip and place playhead over it.")
             return {'CANCELLED'}
-            
+
         strip_name = details["strip"].name
         directory = details["directory"]
         base_name = details["base_name_core"]
         proxy_scale = context.scene.zm_proxy_scale
 
         if _exclude_photo(details):
-            # Usar un temporizador para asegurar que el VSE se actualice después de las operaciones de archivo
             bpy.app.timers.register(
-                lambda: refresh_movie_strip(context, strip_name, directory, base_name, proxy_scale), 
+                lambda: refresh_movie_strip(context, strip_name, directory, base_name, proxy_scale),
                 first_interval=0.1
             )
             self.report({'INFO'}, f"Frame {details['index_str']} excluded and sequence re-indexed.")
         else:
             self.report({'ERROR'}, "Failed to exclude frame.")
             return {'CANCELLED'}
-        
-        return {'FINISHED'}
 
-# --- NOTA DE IMPLEMENTACIÓN ---
-# Los operadores ZM_OT_ReplaceActivePhoto y ZM_OT_InsertActivePhoto requerirían
-# una refactorización de la lógica de captura de zm_movie.py para ser reutilizable.
-# Su implementación se omite aquí, pero seguirían el patrón de llamar a
-# get_active_photo_details(), encolar una tarea en zm_worker y, en el callback,
-# ejecutar la manipulación de archivos y el refresco del VSE.
+        return {'FINISHED'}
 
 # -----------------------------------------------------------------------------
 # Registro
 # -----------------------------------------------------------------------------
 
 classes = (
+    ZM_OT_ReplaceActivePhoto,
+    ZM_OT_InsertActivePhoto,
     ZM_OT_ExcludeActivePhoto,
 )
 
