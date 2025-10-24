@@ -1,6 +1,7 @@
 # zm_movie.py — Zeta Motion 0.5.5
 # Blender 4.5+ | Linux-only
 # Movie sequence creation and management with placeholders and VSE strip.
+# - capture_single_photo(): Captures a single photo via gphoto2 asynchronously (for zm_foto).
 
 import bpy
 import time
@@ -14,10 +15,13 @@ try:
 except ImportError:
     Image = None
 
+import tempfile
+
 # Módulos internos
 from . import state
 from . import zm_stream
 from . import zm_convert   # <-- NEW
+from . import zm_worker
 
 # --- Estado global para la comunicación entre el operador y el temporizador ---
 timer_state = {
@@ -83,6 +87,53 @@ def _find_available_vse_channel(scene):
     while channel in used_channels:
         channel += 1
     return channel
+
+
+def capture_single_photo(dest_path=None, callback=None, tag="foto_capture"):
+    """
+    Captures a single photo using gphoto2 asynchronously via zm_worker.
+
+    Parameters
+    ----------
+    dest_path : str, optional
+        Absolute path where the photo should be saved. If None, a temporary file
+        will be created inside /tmp with .jpg extension.
+    callback : callable, optional
+        Function to be called once capture is complete. Receives the full path
+        to the captured file as argument.
+    tag : str, optional
+        A label for zm_worker logs, defaults to 'foto_capture'.
+
+    Returns
+    -------
+    None
+        The function enqueues the capture in zm_worker; it does not return the result immediately.
+    """
+    from . import zm_worker
+
+    if dest_path is None:
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        dest_path = tmp_file.name
+        tmp_file.close()
+
+    def _task():
+        try:
+            cmd = ["gphoto2", "--capture-image-and-download", "--filename", dest_path]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(f"gphoto2 capture failed: {result.stderr.strip()}")
+            return dest_path
+        except Exception as e:
+            raise RuntimeError(f"Failed to capture photo: {e}")
+
+    def _on_done(result):
+        if callback:
+            try:
+                callback(result)
+            except Exception as cb_err:
+                print(f"[zm_movie] capture_single_photo callback error: {cb_err}")
+
+    zm_worker.enqueue(_task, tag=tag, callback=_on_done)
 
 # --- INICIO DE LA SOLUCIÓN IMPLEMENTADA ---
 def _create_vse_strip(context, directory, base_name, length):
