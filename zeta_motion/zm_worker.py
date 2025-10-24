@@ -1,73 +1,68 @@
 # zm_worker.py — Zeta Motion
 # Blender 4.5+ | Linux-only
-# Asynchronous, non-blocking command executor for gphoto2.
+# Asynchronous, non-blocking task executor for gphoto2 and other callables.
 
 import subprocess
 import threading
 from queue import Queue
 import bpy # <-- Importante para agendar callbacks de forma segura
 
-# --- Cola de Comandos: Único punto de entrada para la ejecución de comandos ---
-camera_cmd_queue = Queue()
-
-def safe_run(cmd, timeout=10):
-    """
-    Ejecuta un comando de forma segura usando subprocess.run.
-    Retorna: (stdout, stderr, returncode)
-    """
-    try:
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=timeout
-        )
-        return result.stdout, result.stderr, result.returncode
-    except subprocess.TimeoutExpired:
-        return None, f"Comando excedió el timeout de {timeout}s", 124
-    except Exception as e:
-        return None, str(e), 1
+# --- Cola de Tareas: Único punto de entrada para la ejecución de tareas ---
+task_queue = Queue()
 
 def _camera_command_worker():
     """
-    Hilo worker que procesa comandos de la cola secuencialmente.
-    Ahora puede manejar callbacks para devolver resultados de forma asíncrona.
+    Hilo worker que procesa tareas (funciones o comandos) de la cola secuencialmente.
     """
     while True:
-        item = camera_cmd_queue.get()
+        item = task_queue.get()
         if item is None:
             break
-        
-        # El item ahora puede ser (cmd, retries, callback)
-        cmd, retries, callback = item if len(item) == 3 else (item[0], item[1], None)
-        
-        final_stdout = None
-        final_stderr = None
-        
-        for attempt in range(retries):
-            stdout, stderr, returncode = safe_run(cmd)
-            if returncode == 0:
-                print(f"✅ [Zeta Motion Worker] Comando exitoso: {cmd}")
-                final_stdout = stdout
-                break
+
+        func, tag, callback = item
+        print(f"[worker:{tag}] task started")
+
+        result = None
+        error = None
+
+        try:
+            if callable(func):
+                result = func()
             else:
-                final_stderr = stderr
-                print(f"❌ [Zeta Motion Worker] Intento {attempt + 1}/{retries} fallido para '{cmd}': {stderr}")
-        
-        # Si había un callback, lo agendamos para que se ejecute en el hilo principal de Blender
-        if callback:
-            # Usamos un lambda para pasar los argumentos al callback
-            def schedule_callback(out, err):
-                # bpy.app.timers.register asegura que esto se ejecute en el hilo principal
-                bpy.app.timers.register(lambda: callback(out, err))
+                raise TypeError(f"Task must be a callable function, but got {type(func)}")
 
-            schedule_callback(final_stdout, final_stderr)
-            
-        camera_cmd_queue.task_done()
+        except Exception as e:
+            print(f"❌ [worker:{tag}] task failed: {e}")
+            error = e
 
-def enqueue_command(cmd, retries=1, callback=None):
+        if callback and error is None:
+            try:
+                bpy.app.timers.register(lambda: callback(result))
+            except Exception as cb_err:
+                print(f"❌ [worker:{tag}] callback scheduling failed: {cb_err}")
+
+        task_queue.task_done()
+
+def enqueue(func, tag="general", callback=None):
     """
-    Función pública para añadir un comando a la cola del worker.
-    Ahora acepta un callback opcional.
+    Añade una tarea (función callable) a la cola del worker.
+
+    Parameters
+    ----------
+    func : callable
+        La función que se ejecutará en el hilo del worker.
+    tag : str, optional
+        Una etiqueta para identificar la tarea en los logs.
+    callback : callable, optional
+        Una función que se llamará en el hilo principal de Blender cuando la
+        tarea termine. Recibirá el valor de retorno de `func` como argumento.
     """
-    camera_cmd_queue.put((cmd, retries, callback))
+    if not callable(func):
+        print(f"❌ [zm_worker] Error: la tarea encolada debe ser una función (callable), no {type(func)}.")
+        return
+
+    task_queue.put((func, tag, callback))
+
 
 # --- Funciones para el ciclo de vida del addon ---
 _worker_thread = None
@@ -82,5 +77,5 @@ def start_worker():
 
 def stop_worker():
     """Envía la señal de apagado a la cola. Se llama desde __init__.py en unregister()."""
-    camera_cmd_queue.put(None)
+    task_queue.put(None)
     print("[Zeta Motion] Señal de apagado enviada al worker.")
