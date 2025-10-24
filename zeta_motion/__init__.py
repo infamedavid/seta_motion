@@ -23,14 +23,14 @@ if sys.platform != "linux":
 # --- Import internal modules ---
 from . import (
     state, zm_camera, zm_stream, zm_ui, zm_movie,
-    zm_preview, zm_convert, zm_movie_source, zm_worker, zm_settings
+    zm_preview, zm_convert, zm_movie_source, zm_worker, zm_settings, zm_foto
 )
 
 modules = {
     "state": state, "zm_camera": zm_camera, "zm_stream": zm_stream,
     "zm_ui": zm_ui, "zm_movie": zm_movie, "zm_preview": zm_preview,
     "zm_convert": zm_convert, "zm_movie_source": zm_movie_source,
-    "zm_worker": zm_worker, "zm_settings": zm_settings,
+    "zm_worker": zm_worker, "zm_settings": zm_settings, "zm_foto": zm_foto
 }
 
 # --- Hot reload for development ---
@@ -114,6 +114,7 @@ def register():
     if hasattr(zm_movie, "register"): zm_movie.register()
     if hasattr(zm_preview, "register"): zm_preview.register()
     if hasattr(zm_ui, "register"): zm_ui.register()
+    if hasattr(zm_foto, "register"): zm_foto.register()
 
     # --- Propiedades de Escena (sin cambios) ---
     bpy.types.Scene.zm_camera_list = bpy.props.EnumProperty(name="Camera", items=lambda self, context: zm_ui.update_camera_list())
@@ -136,8 +137,8 @@ def unregister():
     if bpy.app.timers.is_registered(_settings_sync_timer): bpy.app.timers.unregister(_settings_sync_timer)
     if hasattr(zm_worker, "stop_worker"): zm_worker.stop_worker()
     props_to_remove = (
-        "zm_camera_list", "zm_preview_path", "zm_capture_path", "zm_movie_length", 
-        "zm_movie_overwrite", "zm_proxy_scale", "zm_live_blend_enabled", "zm_blend_factor", 
+        "zm_camera_list", "zm_preview_path", "zm_capture_path", "zm_movie_length",
+        "zm_movie_overwrite", "zm_proxy_scale", "zm_live_blend_enabled", "zm_blend_factor",
         "zm_iso_setting", "zm_aperture_setting", "zm_shutterspeed_setting", "zm_imageformat_setting",
     )
     for prop in props_to_remove:
@@ -149,6 +150,7 @@ def unregister():
     if hasattr(zm_preview, "unregister"): zm_preview.unregister()
     if hasattr(zm_stream, "unregister"): zm_stream.unregister()
     if hasattr(zm_camera, "unregister"): zm_camera.unregister()
+    if hasattr(zm_foto, "unregister"): zm_foto.unregister()
     print("[Zeta Motion] Add-on unloaded cleanly.")
 
 if __name__ == "__main__":
