@@ -5,14 +5,16 @@
 import subprocess
 import threading
 from queue import Queue
-import bpy # <-- Importante para agendar callbacks de forma segura
+import bpy
+from . import state # <-- necesario para manipular flags de estado
 
-# --- Cola de Tareas: Único punto de entrada para la ejecución de tareas ---
 task_queue = Queue()
 
 def _camera_command_worker():
     """
     Hilo worker que procesa tareas (funciones o comandos) de la cola secuencialmente.
+    Marca/limpia state.control_state['system']['photo_task_active'] cuando el tag
+    sea 'foto_capture' para evitar colisiones.
     """
     while True:
         item = task_queue.get()
@@ -21,6 +23,14 @@ def _camera_command_worker():
 
         func, tag, callback = item
         print(f"[worker:{tag}] task started")
+
+        # Si es tarea de foto, marcar el flag (thread-safe con state_lock)
+        if tag == "foto_capture":
+            try:
+                with state.state_lock:
+                    state.control_state["system"]["photo_task_active"] = True
+            except Exception as e:
+                print(f"[worker] Warning: failed to set photo_task_active: {e}")
 
         result = None
         error = None
@@ -35,11 +45,20 @@ def _camera_command_worker():
             print(f"❌ [worker:{tag}] task failed: {e}")
             error = e
 
+        # schedule callback on main thread if provided and task succeeded
         if callback and error is None:
             try:
                 bpy.app.timers.register(lambda: callback(result))
             except Exception as cb_err:
                 print(f"❌ [worker:{tag}] callback scheduling failed: {cb_err}")
+
+        # Si fue tarea de foto, limpiar el flag (thread-safe)
+        if tag == "foto_capture":
+            try:
+                with state.state_lock:
+                    state.control_state["system"]["photo_task_active"] = False
+            except Exception as e:
+                print(f"[worker] Warning: failed to clear photo_task_active: {e}")
 
         task_queue.task_done()
 
@@ -47,22 +66,13 @@ def enqueue(func, tag="general", callback=None):
     """
     Añade una tarea (función callable) a la cola del worker.
 
-    Parameters
-    ----------
-    func : callable
-        La función que se ejecutará en el hilo del worker.
-    tag : str, optional
-        Una etiqueta para identificar la tarea en los logs.
-    callback : callable, optional
-        Una función que se llamará en el hilo principal de Blender cuando la
-        tarea termine. Recibirá el valor de retorno de `func` como argumento.
+    Mantiene la misma firma: enqueue(func, tag='general', callback=None)
     """
     if not callable(func):
         print(f"❌ [zm_worker] Error: la tarea encolada debe ser una función (callable), no {type(func)}.")
         return
 
     task_queue.put((func, tag, callback))
-
 
 # --- Funciones para el ciclo de vida del addon ---
 _worker_thread = None
