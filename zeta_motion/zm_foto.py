@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 from . import zm_movie_source, zm_worker
+from .zm_capture_core import capture_image, build_output_path, register_snapshot
 
 # =========================================================
 # HELPERS
@@ -157,11 +158,11 @@ class ZM_OT_ReplaceActivePhoto(bpy.types.Operator):
             return {'CANCELLED'}
 
         def capture_and_replace():
-            from .zm_movie import capture_single_photo
-            def on_done(photo_path):
-                _replace_photo(photo_path, details)
+            output_path = build_output_path(context.scene, prefix="foto")
+            if capture_image(output_path):
+                register_snapshot(context.scene, output_path)
+                _replace_photo(output_path, details)
                 refresh_movie_strip(context, details["base_name"], details["directory"])
-            capture_single_photo(callback=on_done, tag="foto_capture")
 
         zm_worker.enqueue(capture_and_replace, tag="foto_capture")
         return {'FINISHED'}
@@ -179,11 +180,11 @@ class ZM_OT_InsertActivePhoto(bpy.types.Operator):
             return {'CANCELLED'}
 
         def capture_and_insert():
-            from .zm_movie import capture_single_photo
-            def on_done(photo_path):
-                _insert_photo(photo_path, details)
+            output_path = build_output_path(context.scene, prefix="foto")
+            if capture_image(output_path):
+                register_snapshot(context.scene, output_path)
+                _insert_photo(output_path, details)
                 refresh_movie_strip(context, details["base_name"], details["directory"])
-            capture_single_photo(callback=on_done, tag="foto_capture")
 
         zm_worker.enqueue(capture_and_insert, tag="foto_capture")
         return {'FINISHED'}
