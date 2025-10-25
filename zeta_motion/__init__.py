@@ -23,14 +23,16 @@ if sys.platform != "linux":
 # --- Import internal modules ---
 from . import (
     state, zm_camera, zm_stream, zm_ui, zm_movie,
-    zm_preview, zm_convert, zm_movie_source, zm_worker, zm_settings, zm_foto
+    zm_preview, zm_convert, zm_movie_source, zm_worker, zm_settings, zm_foto,
+    zm_capture_core
 )
 
 modules = {
     "state": state, "zm_camera": zm_camera, "zm_stream": zm_stream,
     "zm_ui": zm_ui, "zm_movie": zm_movie, "zm_preview": zm_preview,
     "zm_convert": zm_convert, "zm_movie_source": zm_movie_source,
-    "zm_worker": zm_worker, "zm_settings": zm_settings, "zm_foto": zm_foto
+    "zm_worker": zm_worker, "zm_settings": zm_settings, "zm_foto": zm_foto,
+    "zm_capture_core": zm_capture_core
 }
 
 # --- Hot reload for development ---

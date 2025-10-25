@@ -6,13 +6,32 @@ import bpy
 import os
 from . import state
 from . import zm_properties
+from .zm_capture_core import capture_image, register_snapshot, build_output_path
 
 # ------------------------------------------------------------
 # CONSTANTES
 # ------------------------------------------------------------
 PREVIEW_STRIP_NAME = "ZM_Preview"
 PREVIEW_CHANNEL = 20  # Canal reservado para preview
-PREVIEW_FILENAME = "preview.jpg"
+
+
+class ZM_OT_CapturePreview(bpy.types.Operator):
+    bl_idname = "zm.capture_preview"
+    bl_label = "Capture Preview"
+    bl_description = "Captura una imagen de preview y la actualiza en el VSE"
+
+    def execute(self, context):
+        scene = context.scene
+        output_path = build_output_path(scene, prefix="preview")
+
+        if capture_image(output_path):
+            register_snapshot(scene, output_path)
+            refresh_preview_strip(context)
+        else:
+            self.report({'ERROR'}, "Fallo al capturar la imagen de preview.")
+
+        return {'FINISHED'}
+
 
 # ------------------------------------------------------------
 # UTILIDADES
@@ -33,14 +52,9 @@ def get_preview_path(scene):
         return None
 
     if os.path.isfile(path_candidate):
-        base_dir = os.path.dirname(path_candidate)
-    else:
-        base_dir = path_candidate
+        return path_candidate
 
-    if not os.path.isdir(base_dir):
-        return None
-
-    return os.path.join(base_dir, PREVIEW_FILENAME)
+    return None
 
 def find_existing_preview_strip(scene):
     """Busca el strip existente de preview:
@@ -263,6 +277,11 @@ def destroy_preview_strip(scene):
             pass
     return ok
 
+
+classes = (
+    ZM_OT_CapturePreview,
+)
+
 # ------------------------------------------------------------
 # registro mínimo
 # ------------------------------------------------------------
@@ -272,9 +291,13 @@ def register():
         name="Preview Strip Name",
         description="Identificador del strip de preview activo"
     )
+    for cls in classes:
+        bpy.utils.register_class(cls)
     print("[Zeta Motion] zm_preview registered.")
 
 def unregister():
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
     if hasattr(bpy.types.Scene, "zm_preview_strip_name"):
         try:
             delattr(bpy.types.Scene, "zm_preview_strip_name")
